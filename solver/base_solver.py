@@ -3,6 +3,8 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from models.data_model import ProblemInstance
 from models.solver_model import SolverSetting
 
+import random
+
 class Solver:
     """
     Solver object that takes a problem instance as input, creates and solves a capacitated vehicle routing problem with time
@@ -23,7 +25,122 @@ class Solver:
         self.manager = None
         self.routing = None
         self.solution = None
+        self.best_solution = None # GA soln
 
+    # -------------------------------- #
+
+    # Split a sequence of nodes into valid routes
+    def split_routes(self, nodes):
+        routes = []
+        route = []
+        load = 0
+        for node in nodes:
+            demand = self.data["demands"][node]
+            if load + demand > self.data["vehicle_capacities"][0]:
+                routes.append(route + [self.data["depot"]])
+                route = [self.data["depot"]]
+                load = 0
+            route.append(node)
+            load += demand
+        routes.append(route + [self.data["depot"]])  # Add depot to the last route
+        return routes
+
+    def genetic_algorithm(self, population_size=50, generations=100, mutation_rate=0.1):
+        """
+        Solve CVRP using Genetic Algorithm.
+
+        Parameters:
+        - population_size: Number of solutions in each generation.
+        - generations: Number of generations to evolve.
+        - mutation_rate: Probability of mutation for a route.
+
+        Returns:
+        - Best solution found with its objective value.
+        """
+
+        # Helper function to calculate total distance for a route
+        def calculate_distance(route):
+            distance = 0
+            for i in range(len(route) - 1):
+                distance += self.data["time_matrix"][route[i]][route[i + 1]]
+            return distance
+
+        # Fitness function: minimize distance + penalty for over-capacity
+        def fitness(individual):
+            total_distance = 0
+            for route in individual:
+                if len(route) > 1:  # Ignore empty routes
+                    route_distance = calculate_distance(route)
+                    load = sum(self.data["demands"][node] for node in route)
+                    capacity_penalty = max(0, load - self.data["vehicle_capacities"][0]) * 1000
+                    total_distance += route_distance + capacity_penalty
+            return total_distance
+
+        # Initialize population
+        def initialize_population():
+            population = []
+            for _ in range(population_size):
+                nodes = list(range(len(self.data["time_matrix"])))
+                random.shuffle(nodes)
+                individual = self.split_routes(nodes)
+                population.append(individual)
+            return population
+
+        # Selection: Tournament Selection
+        def tournament_selection(population):
+            tournament = random.sample(population, 5)
+            return min(tournament, key=fitness)
+
+        # Crossover: Order Crossover (OX)
+        def crossover(parent1, parent2):
+            nodes1 = [node for route in parent1 for node in route if node != self.data["depot"]]
+            nodes2 = [node for route in parent2 for node in route if node != self.data["depot"]]
+
+            start, end = sorted(random.sample(range(len(nodes1)), 2))
+            offspring = nodes1[start:end + 1]
+            for node in nodes2:
+                if node not in offspring:
+                    offspring.append(node)
+            return self.split_routes(offspring)
+
+        def mutate(individual):
+            for route in individual:
+                if len(route) > 2:  # Ensure there's at least one node other than depot
+                    if len(route) > 3:  # Only perform mutation if there are enough nodes to swap
+                        i, j = random.sample(range(1, len(route) - 1), 2)  # Avoid depot
+                        route[i], route[j] = route[j], route[i]
+
+        # Genetic Algorithm Loop
+        population = initialize_population()
+        best_individual = min(population, key=fitness)
+
+        for generation in range(generations):
+            new_population = []
+            for _ in range(population_size):
+                parent1 = tournament_selection(population)
+                parent2 = tournament_selection(population)
+                offspring = crossover(parent1, parent2)
+                mutate(offspring)
+                new_population.append(offspring)
+            population = new_population
+            current_best = min(population, key=fitness)
+            if fitness(current_best) < fitness(best_individual):
+                best_individual = current_best
+
+        self.best_solution = best_individual
+        return best_individual, fitness(best_individual)
+
+    def get_ga_solution(self):
+        """Return the GA solution in the required format."""
+        routes = self.best_solution
+        metadata = []
+        for route in routes:
+            load = sum(self.data["demands"][node] for node in route if node != self.data["depot"])
+            time = sum(self.data["time_matrix"][route[i]][route[i + 1]] for i in range(len(route) - 1))
+            metadata.append({"load": load, "time": time / self.time_precision_scaler})
+        return routes, metadata
+
+    # ------------------------- #
     def create_model(self):
         """
         Create vehicle routing model for Solomon instance.

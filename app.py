@@ -30,25 +30,33 @@ def get_data_info():
 # Updated optimize function in the Flask application
 @app.route('/optimize', methods=['POST'])
 def optimize():
+    # Extract request parameters
     dataset_name = request.json['dataset']
     time_precision_scaler = int(request.json['time_precision_scaler'])
     time_limit = int(request.json['time_limit'])
+    method = request.json.get('method', 'or-tools')  # Default to 'or-tools' if not specified
 
+    # Load data instance
     path = f'data/{dataset_name}'
     data = load_instance(path, time_precision_scaler)
     solver = Solver(data, time_precision_scaler)
-    solver.create_model()
 
-    # Run the optimization
-    settings = {'time_limit': time_limit}
-    solver.solve_model(settings)
+    # Optimize based on the selected method
+    if method == 'or-tools':
+        solver.create_model()
+        solver.solve_model({'time_limit': time_limit})
+        routes, metadata = solver.get_routes()
+        objective = solver.get_total_time()
+    elif method == 'genetic':
+        routes, objective = solver.genetic_algorithm()
+        routes, metadata = solver.get_ga_solution()
+    else:
+        return jsonify({"error": f"Unknown method: {method}"}), 400
 
-    # Retrieve routes and their associated metadata
-    routes, metadata = solver.get_routes()
-
+    # Prepare solution to send back
     solution = {
         "status": 1,
-        "objective": solver.get_total_time(),
+        "objective": objective,
         "routes": routes,
         "metadata": metadata,
         "total_time": solver.get_total_time(),

@@ -1,3 +1,6 @@
+let chartInstance = null;
+let pieChartInstance = null;
+
 // Load datasets from the server
 async function loadDatasets() {
     let response = await fetch('/load_datasets');
@@ -37,6 +40,7 @@ async function executeOptimization() {
     let dataset = document.getElementById('dataset').value;
     let time_precision_scaler = document.getElementById('time_precision_scaler').value;
     let time_limit = document.getElementById('time_limit').value;
+    let method = document.getElementById("method").value;
 
     showLoading();
     clearGraphAndOutput();
@@ -48,7 +52,7 @@ async function executeOptimization() {
         let response = await fetch('/optimize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dataset, time_precision_scaler, time_limit })
+            body: JSON.stringify({ dataset, time_precision_scaler, time_limit, method })
         });
 
         if (!response.ok) {
@@ -115,7 +119,7 @@ function displayResults(solution) {
         });
 
         // Now that we have routeTimes and vehicleLoads, trigger graph generation
-        generateStatisticalGraphs(routeTimes, vehicleLoads);
+        generateStatisticalGraphs(routeTimes, vehicleLoads);  // Pass them as arguments
 
         outputDiv.innerHTML += `<p><strong>Total Time of All Routes:</strong> ${solution.total_time !== undefined ? solution.total_time + ' minutes' : 'N/A'}</p>`;
         outputDiv.innerHTML += `<p><strong>Total Travel Time of All Routes:</strong> ${solution.total_travel_time !== undefined ? solution.total_travel_time + ' minutes' : 'N/A'}</p>`;
@@ -239,6 +243,11 @@ function generateStatisticalGraphs(routeTimes, vehicleLoads) {
     const canvas = document.getElementById('statsCanvas');
     const ctx = canvas.getContext('2d');
 
+    // If there's already a chart, destroy it
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
     // Prepare the data for the Bar chart (Route Times and Vehicle Loads)
     const data = {
         labels: routeTimes.map((_, index) => `Route ${index + 1}`),  // Use route index for labels
@@ -261,7 +270,7 @@ function generateStatisticalGraphs(routeTimes, vehicleLoads) {
     };
 
     // Create the Bar chart using Chart.js
-    new Chart(ctx, {
+    chartInstance = new Chart(ctx, {
         type: 'bar',
         data: data,
         options: {
@@ -278,6 +287,10 @@ function generateStatisticalGraphs(routeTimes, vehicleLoads) {
     const pieChartCanvas = document.getElementById('pieChartCanvas');
     const pieCtx = pieChartCanvas.getContext('2d');
 
+    if (pieChartInstance) {
+        pieChartInstance.destroy();  // Destroy the previous pie chart if exists
+    }
+
     // Prepare data for Pie chart (Vehicle Loads)
     const pieData = {
         labels: routeTimes.map((_, index) => `Route ${index + 1}`),  // Labels based on routes
@@ -293,7 +306,7 @@ function generateStatisticalGraphs(routeTimes, vehicleLoads) {
     };
 
     // Create the Pie chart using Chart.js
-    new Chart(pieCtx, {
+    pieChartInstance = new Chart(pieCtx, {
         type: 'pie',
         data: pieData,
         options: {
@@ -314,11 +327,35 @@ function generateStatisticalGraphs(routeTimes, vehicleLoads) {
     });
 }
 
+let routeTimes = [];
+let vehicleLoads = [];
 
 window.onload = function() {
-    loadDatasets();  // Initialize datasets on page load
+    // Ensure routeTimes and vehicleLoads are initialized
+    routeTimes = routeTimes || [];
+    vehicleLoads = vehicleLoads || [];
+    loadDatasets();
 
-    // Attach event listeners after the DOM is fully loaded
+    const methodSelect = document.getElementById('method');
+    const timePrecisionScaler = document.getElementById('time_precision_scaler');
+    const timeLimit = document.getElementById('time_limit');
+
+    function toggleTimeFields() {
+        if (methodSelect.value === 'or-tools') {
+            timePrecisionScaler.style.display = 'inline';
+            timeLimit.style.display = 'inline';
+        } else {
+            timePrecisionScaler.style.display = 'none';
+            timeLimit.style.display = 'none';
+        }
+
+        clearGraphAndOutput();
+        document.getElementById('statsButton').style.display = 'none';
+    }
+
+    methodSelect.addEventListener('change', toggleTimeFields);
+    toggleTimeFields();
+
     document.getElementById('statsButton').addEventListener('click', function() {
         document.getElementById('statsModal').style.display = 'block';
         generateStatisticalGraphs(routeTimes, vehicleLoads);
