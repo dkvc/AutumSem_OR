@@ -43,6 +43,7 @@ body {
 .controls button {
     background-color: #61dafb;
     cursor: pointer;
+    color: black;
 }
 
 .graph {

@@ -3,7 +3,6 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from models.data_model import ProblemInstance
 from models.solver_model import SolverSetting
 
-
 class Solver:
     """
     Solver object that takes a problem instance as input, creates and solves a capacitated vehicle routing problem with time
@@ -59,9 +58,7 @@ class Solver:
             from_node = self.manager.IndexToNode(from_index)
             return self.data["demands"][from_node]
 
-        demand_callback_index = self.routing.RegisterUnaryTransitCallback(
-            demand_callback
-        )
+        demand_callback_index = self.routing.RegisterUnaryTransitCallback(demand_callback)
 
         # Register vehicle capacitites
         self.routing.AddDimensionWithVehicleCapacity(
@@ -185,22 +182,45 @@ class Solver:
             yield self.get_routes()  # Final solution
 
     def get_routes(self):
-        """Retrieve routes from the solution."""
+        """Retrieve routes from the solution along with associated metadata like time and load."""
         if not self.solution:
-            return []
+            return [], []  # Return empty routes and metadata if no solution exists
 
         routes = []
+        metadata = []  # Store metadata for each route, e.g., time and load
+        time_dimension = self.routing.GetDimensionOrDie("Time")
+        cap_dimension = self.routing.GetDimensionOrDie("Capacity")
+
         for vehicle_id in range(self.data['num_vehicles']):
             index = self.routing.Start(vehicle_id)
             route = []
+            total_load = 0
+            route_time = 0
+
             while not self.routing.IsEnd(index):
                 node_index = self.manager.IndexToNode(index)
                 route.append(node_index)
-                index = self.solution.Value(self.routing.NextVar(index))
-            route.append(self.manager.IndexToNode(index))  # Add the end node
-            routes.append(route)
 
-        return routes
+                # Retrieve cumulative time and load
+                time_var = time_dimension.CumulVar(index)
+                cap_var = cap_dimension.CumulVar(index)
+                total_load = self.solution.Min(cap_var)
+                route_time = self.solution.Min(time_var) / self.time_precision_scaler
+
+                index = self.solution.Value(self.routing.NextVar(index))
+            
+            # Add depot as the final node
+            route.append(self.manager.IndexToNode(index))
+
+            # Append route and associated metadata
+            routes.append(route)
+            metadata.append({
+                "load": total_load,
+                "time": route_time
+            })
+
+        return routes, metadata
+
 
     def get_total_time(self):
         """Calculate the total time for all routes."""
@@ -214,6 +234,30 @@ class Solver:
             total_time += self.solution.Min(time_dimension.CumulVar(index))
 
         return total_time / self.time_precision_scaler
+
+    def get_total_travel_time(self):
+        """Calculate total travel time by excluding service times."""
+        if not self.solution:
+            return 0
+
+        time_dimension = self.routing.GetDimensionOrDie("Time")
+        total_time = 0
+        for vehicle_id in range(self.data['num_vehicles']):
+            index = self.routing.End(vehicle_id)
+            total_time += self.solution.Min(time_dimension.CumulVar(index))
+
+        # Subtract the total service times
+        total_travel_time = total_time - sum(self.data["service_times"]) / self.time_precision_scaler
+        return total_travel_time
+
+    def get_vehicle_load(self, vehicle_id):
+        """Retrieve the load for a specific vehicle."""
+        if not self.solution:
+            return 0
+
+        cap_dimension = self.routing.GetDimensionOrDie("Capacity")
+        index = self.routing.End(vehicle_id)
+        return self.solution.Min(cap_dimension.CumulVar(index))
 
     def get_num_vehicles(self):
         """Count the number of vehicles used in the solution."""

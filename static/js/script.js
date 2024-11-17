@@ -1,6 +1,10 @@
 // Load datasets from the server
 async function loadDatasets() {
     let response = await fetch('/load_datasets');
+    if (!response.ok) {
+        console.error('Failed to load datasets');
+        return;
+    }
     let datasets = await response.json();
     let datasetSelect = document.getElementById('dataset');
     datasets.forEach(dataset => {
@@ -19,6 +23,12 @@ async function loadDataInfo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataset })
     });
+
+    if (!response.ok) {
+        console.error('Failed to load dataset information');
+        return;
+    }
+
     let dataInfo = await response.json();
     document.getElementById('output').innerText = `Vehicles: ${dataInfo.num_vehicles}, Capacity: ${dataInfo.vehicle_capacity}`;
 }
@@ -28,7 +38,6 @@ async function executeOptimization() {
     let time_precision_scaler = document.getElementById('time_precision_scaler').value;
     let time_limit = document.getElementById('time_limit').value;
 
-    // Show loading indicator and clear previous graph content
     showLoading();
     clearGraphAndOutput();
 
@@ -39,67 +48,109 @@ async function executeOptimization() {
             body: JSON.stringify({ dataset, time_precision_scaler, time_limit })
         });
 
-        let solution = await response.json();
-        console.log("Received solution:", solution);
+        if (!response.ok) {
+            console.error('Failed to execute optimization');
+            return;
+        }
 
-        // Update graph and output with new solution data
-        visualizeRoutes(solution.routes);
+        let solution = await response.json();
         displayResults(solution);
+        visualizeRoutes(solution.routes);
     } catch (error) {
         console.error("Error during optimization execution:", error);
     } finally {
-        // Hide loading indicator after updating content
         hideLoading();
     }
 }
 
+// Global highlight functions
+function highlightRoute(routeIndex) {
+    routeGroups.forEach((group, i) => {
+        group.selectAll("path").attr("opacity", i === routeIndex ? 1 : 0.1);
+    });
+}
+
+function resetHighlight() {
+    routeGroups.forEach(group => {
+        group.selectAll("path").attr("opacity", 1);
+    });
+}
 
 function displayResults(solution) {
     const outputDiv = document.getElementById('output');
-    outputDiv.innerHTML = ''; // Clear previous content
+    outputDiv.innerHTML = '';  // Clear previous content
 
-    // Display summary information
     outputDiv.innerHTML += `<h3>Optimization Results</h3>`;
-    outputDiv.innerHTML += `<p><strong>Number of Vehicles Used:</strong> ${solution.num_vehicles}</p>`;
-    outputDiv.innerHTML += `<p><strong>Total Time:</strong> ${solution.total_time} minutes</p>`;
+    outputDiv.innerHTML += `<p><strong>Solution Status:</strong> ${solution.status}</p>`;
 
-    // Display each route with hover events for highlighting
-    outputDiv.innerHTML += `<h4>Routes:</h4>`;
-    solution.routes.forEach((route, index) => {
-        const routeID = `route-${index}`;
-        outputDiv.innerHTML += `
-            <div class="route-summary" 
-                 id="${routeID}" 
-                 onmouseover="highlightRoute(${index})" 
-                 onmouseout="resetHighlight()">
-                <p><strong>Vehicle ${index + 1}:</strong> ${route.join(' -> ')}</p>
-            </div>
-        `;
+    if (solution.status === 1) {  // Assuming 1 indicates success
+        outputDiv.innerHTML += `<p><strong>Objective Value:</strong> ${solution.objective}</p>`;
+
+        solution.routes.forEach((route, index) => {
+            let routeDetails = `<p><strong>Route for vehicle ${index + 1}:</strong></p>`;
+            routeDetails += `<p class="route-hover" data-index="${index}">${route.join(' -> ')}</p>`;  // Make it clickable
+
+            // Get metadata for the current route (time and load)
+            const metadata = solution.metadata[index];  // Get corresponding metadata for this route
+
+            // Display time and load from metadata
+            routeDetails += `<p>Time of the route: ${metadata.time !== undefined ? metadata.time + ' minutes' : 'N/A'}</p>`;
+            routeDetails += `<p>Load of vehicle: ${metadata.load !== undefined ? metadata.load : 'N/A'}</p>`;
+
+            outputDiv.innerHTML += routeDetails;
+        });
+
+        outputDiv.innerHTML += `<p><strong>Total Time of All Routes:</strong> ${solution.total_time !== undefined ? solution.total_time + ' minutes' : 'N/A'}</p>`;
+        outputDiv.innerHTML += `<p><strong>Total Travel Time of All Routes:</strong> ${solution.total_travel_time !== undefined ? solution.total_travel_time + ' minutes' : 'N/A'}</p>`;
+        outputDiv.innerHTML += `<p><strong>Total Vehicles Used:</strong> ${solution.num_vehicles !== undefined ? solution.num_vehicles : 'N/A'}</p>`;
+    } else {
+        outputDiv.innerHTML += `<p>No valid solution found.</p>`;
+    }
+
+    // Add hover effect to output route items
+    const routeHoverElements = document.querySelectorAll('.route-hover');
+    routeHoverElements.forEach(item => {
+        item.addEventListener('mouseover', function() {
+            const routeIndex = this.getAttribute('data-index');
+            highlightRoute(parseInt(routeIndex));
+        });
+        item.addEventListener('mouseout', resetHighlight);
     });
 }
 
 function visualizeRoutes(routes) {
+    console.log("Routes received in visualizeRoutes:", routes);
     const svgContainer = d3.select("#graph-canvas");
-    svgContainer.selectAll("*").remove();  // Clear previous routes
+    svgContainer.selectAll("*").remove();
 
     const width = svgContainer.node().getBoundingClientRect().width;
     const height = svgContainer.node().getBoundingClientRect().height;
-
     const mainGroup = svgContainer.append("g");
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
-    // Dummy coordinates for visualization purposes
-    const nodeCoords = routes.flat().reduce((coords, node, index) => {
-        coords[node] = { x: Math.random() * width, y: Math.random() * height };
-        return coords;
-    }, {});
+    // Define grid layout with a fixed number of rows and columns
+    const gridSpacing = 100;  // Spacing between nodes
+    const numColumns = Math.floor(width / gridSpacing);
+    const numRows = Math.ceil(Object.keys(routes).length / numColumns);
 
-    // Draw each route as a group and store each for easy manipulation
-    const routeGroups = routes.map((route, i) => {
+    // Create a map of node positions
+    const nodeCoords = {};
+    let row = 0;
+    let col = 0;
+    Object.keys(routes.flat()).forEach((node, index) => {
+        nodeCoords[node] = { x: col * gridSpacing, y: row * gridSpacing };
+        col++;
+        if (col >= numColumns) {
+            col = 0;
+            row++;
+        }
+    });
+
+    // Continue with the graph visualization logic as before
+    routeGroups = routes.map((route, i) => {
         const group = mainGroup.append("g").attr("class", `route-group vehicle-${i}`);
-        
         group.selectAll("path")
-            .data(route.slice(1))  // Exclude the starting depot for lines
+            .data(route.slice(1))
             .enter()
             .append("path")
             .attr("d", (d, j) => {
@@ -114,12 +165,11 @@ function visualizeRoutes(routes) {
             .attr("stroke", colorScale(i))
             .attr("stroke-width", 2)
             .attr("fill", "none")
-            .attr("opacity", 1);  // Initially, all routes are fully visible
+            .attr("opacity", 1);
 
         return group;
     });
 
-    // Draw nodes as circles with labels
     mainGroup.selectAll("circle.node")
         .data(Object.keys(nodeCoords))
         .enter()
@@ -143,18 +193,15 @@ function visualizeRoutes(routes) {
         .style("font-size", "10px")
         .style("fill", "#ffffff");
 
-    // Functions to highlight and reset route opacity based on sidebar interaction
-    window.highlightRoute = function(routeIndex) {
-        routeGroups.forEach((group, i) => {
-            group.selectAll("path").attr("opacity", i === routeIndex ? 1 : 0.1);
+    // Add zoom behavior to the SVG
+    const zoom = d3.zoom()
+        .scaleExtent([0.5, 5])  // Min and Max zoom levels
+        .on("zoom", function(event) {
+            mainGroup.attr("transform", event.transform);
         });
-    };
 
-    window.resetHighlight = function() {
-        routeGroups.forEach(group => {
-            group.selectAll("path").attr("opacity", 1);
-        });
-    };
+    // Apply the zoom behavior to the SVG container
+    svgContainer.call(zoom);
 }
 
 function showLoading() {
@@ -166,13 +213,8 @@ function hideLoading() {
 }
 
 function clearGraphAndOutput() {
-    // Clear the graph canvas (remove all elements inside the SVG)
     d3.select("#graph-canvas").selectAll("*").remove();
-
-    // Clear output text
     document.getElementById('output').innerHTML = '';
 }
 
-
-// Load datasets when the page loads
 window.onload = loadDatasets;

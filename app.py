@@ -27,7 +27,7 @@ def get_data_info():
         'vehicle_capacity': data['vehicle_capacities'][0]
     })
 
-# Run optimization and provide updates for each step
+# Updated optimize function in the Flask application
 @app.route('/optimize', methods=['POST'])
 def optimize():
     dataset_name = request.json['dataset']
@@ -39,16 +39,23 @@ def optimize():
     solver = Solver(data, time_precision_scaler)
     solver.create_model()
 
-    # Run the optimization once
+    # Run the optimization
     settings = {'time_limit': time_limit}
     solver.solve_model(settings)
 
-    # Get final route information (adjust these methods based on your Solver implementation)
+    # Retrieve routes and their associated metadata
+    routes, metadata = solver.get_routes()
+
     solution = {
-        "routes": solver.get_routes(),  # Make sure get_routes is implemented in Solver
-        "total_time": solver.get_total_time(),  # Method to get total time
-        "num_vehicles": solver.get_num_vehicles()  # Method to get number of vehicles used
+        "status": 1,
+        "objective": solver.get_total_time(),
+        "routes": routes,
+        "metadata": metadata,
+        "total_time": solver.get_total_time(),
+        "total_travel_time": solver.get_total_travel_time(),
+        "num_vehicles": solver.get_num_vehicles()
     }
+
     return jsonify(solution)
 
 
