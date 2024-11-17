@@ -41,6 +41,9 @@ async function executeOptimization() {
     showLoading();
     clearGraphAndOutput();
 
+    // Hide the analysis button until the optimization is complete
+    document.getElementById('statsButton').style.display = 'none';
+
     try {
         let response = await fetch('/optimize', {
             method: 'POST',
@@ -56,6 +59,9 @@ async function executeOptimization() {
         let solution = await response.json();
         displayResults(solution);
         visualizeRoutes(solution.routes);
+
+        // Show the analysis button after the optimization is complete
+        document.getElementById('statsButton').style.display = 'block';
     } catch (error) {
         console.error("Error during optimization execution:", error);
     } finally {
@@ -83,6 +89,10 @@ function displayResults(solution) {
     outputDiv.innerHTML += `<h3>Optimization Results</h3>`;
     outputDiv.innerHTML += `<p><strong>Solution Status:</strong> ${solution.status}</p>`;
 
+    // Initialize routeTimes and vehicleLoads
+    const routeTimes = [];
+    const vehicleLoads = [];
+
     if (solution.status === 1) {  // Assuming 1 indicates success
         outputDiv.innerHTML += `<p><strong>Objective Value:</strong> ${solution.objective}</p>`;
 
@@ -97,8 +107,15 @@ function displayResults(solution) {
             routeDetails += `<p>Time of the route: ${metadata.time !== undefined ? metadata.time + ' minutes' : 'N/A'}</p>`;
             routeDetails += `<p>Load of vehicle: ${metadata.load !== undefined ? metadata.load : 'N/A'}</p>`;
 
+            // Push values to routeTimes and vehicleLoads
+            if (metadata.time !== undefined) routeTimes.push(metadata.time);
+            if (metadata.load !== undefined) vehicleLoads.push(metadata.load);
+
             outputDiv.innerHTML += routeDetails;
         });
+
+        // Now that we have routeTimes and vehicleLoads, trigger graph generation
+        generateStatisticalGraphs(routeTimes, vehicleLoads);
 
         outputDiv.innerHTML += `<p><strong>Total Time of All Routes:</strong> ${solution.total_time !== undefined ? solution.total_time + ' minutes' : 'N/A'}</p>`;
         outputDiv.innerHTML += `<p><strong>Total Travel Time of All Routes:</strong> ${solution.total_travel_time !== undefined ? solution.total_travel_time + ' minutes' : 'N/A'}</p>`;
@@ -117,6 +134,7 @@ function displayResults(solution) {
         item.addEventListener('mouseout', resetHighlight);
     });
 }
+
 
 function visualizeRoutes(routes) {
     console.log("Routes received in visualizeRoutes:", routes);
@@ -217,4 +235,96 @@ function clearGraphAndOutput() {
     document.getElementById('output').innerHTML = '';
 }
 
-window.onload = loadDatasets;
+function generateStatisticalGraphs(routeTimes, vehicleLoads) {
+    const canvas = document.getElementById('statsCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Prepare the data for the Bar chart (Route Times and Vehicle Loads)
+    const data = {
+        labels: routeTimes.map((_, index) => `Route ${index + 1}`),  // Use route index for labels
+        datasets: [
+            {
+                label: 'Route Times (min)',
+                data: routeTimes, // Route times from the optimization result
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Vehicle Loads',
+                data: vehicleLoads, // Vehicle loads from the optimization result
+                backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                borderColor: 'rgba(153, 102, 255, 1)',
+                borderWidth: 1
+            }
+        ]
+    };
+
+    // Create the Bar chart using Chart.js
+    new Chart(ctx, {
+        type: 'bar',
+        data: data,
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Create Pie chart for vehicle loads
+    const pieChartCanvas = document.getElementById('pieChartCanvas');
+    const pieCtx = pieChartCanvas.getContext('2d');
+
+    // Prepare data for Pie chart (Vehicle Loads)
+    const pieData = {
+        labels: routeTimes.map((_, index) => `Route ${index + 1}`),  // Labels based on routes
+        datasets: [
+            {
+                label: 'Vehicle Loads',
+                data: vehicleLoads,  // Vehicle loads from the optimization result
+                backgroundColor: ['rgba(153, 102, 255, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(255, 159, 64, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)'],
+                borderColor: ['rgba(153, 102, 255, 1)', 'rgba(75, 192, 192, 1)', 'rgba(255, 159, 64, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)'],
+                borderWidth: 1
+            }
+        ]
+    };
+
+    // Create the Pie chart using Chart.js
+    new Chart(pieCtx, {
+        type: 'pie',
+        data: pieData,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(tooltipItem) {
+                            return `Load: ${tooltipItem.raw}`; // Display load value in the tooltip
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+window.onload = function() {
+    loadDatasets();  // Initialize datasets on page load
+
+    // Attach event listeners after the DOM is fully loaded
+    document.getElementById('statsButton').addEventListener('click', function() {
+        document.getElementById('statsModal').style.display = 'block';
+        generateStatisticalGraphs(routeTimes, vehicleLoads);
+    });
+
+    document.getElementById('closeStats').addEventListener('click', function() {
+        document.getElementById('statsModal').style.display = 'none';
+    });
+};
