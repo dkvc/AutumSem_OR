@@ -340,13 +340,22 @@ window.onload = function() {
     const timePrecisionScaler = document.getElementById('time_precision_scaler');
     const timeLimit = document.getElementById('time_limit');
 
+    const timePLabel = document.getElementById('time_precision_scaler_label');
+    const timeLLabel = document.getElementById('time_limit_label');
+
     function toggleTimeFields() {
         if (methodSelect.value === 'or-tools') {
             timePrecisionScaler.style.display = 'inline';
             timeLimit.style.display = 'inline';
+            
+            timePLabel.style.display = 'inline';
+            timeLLabel.style.display = 'inline';
         } else {
             timePrecisionScaler.style.display = 'none';
             timeLimit.style.display = 'none';
+
+            timePLabel.style.display = 'none';
+            timeLLabel.style.display = 'none';
         }
 
         clearGraphAndOutput();
