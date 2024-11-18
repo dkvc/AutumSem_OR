@@ -1,19 +1,16 @@
-# or project
+# OR project
 
+Python Version: **3.12**
 
 ## Usage
-Make sure you have python installed
 
-1. Clone repo
+1. Clone repository.
   ```sh
     git clone https://github.com/AlexKressner/Vehicle_Routing_Problem
   ```
-2. Change directory
-  ```sh
-    cd Vehicle_Routing_Problem
-  ```
-3. run app.py
+
+2. Run app.py
   ```sh
     python app.py
   ```
-4. click on these link to see the website ("http://127.0.0.1:5000")
+3. Locate your website on "http://127.0.0.1:5000" or "http://localhost:5000.
