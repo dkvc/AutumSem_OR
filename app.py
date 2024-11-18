@@ -1,18 +1,48 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, g
 from solver.base_solver import Solver
 from util.instance_loader import load_instance
+
+import psycopg2
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
+
+# Function to get the database connection
+def get_db():
+    if 'db' not in g:
+        g.db = psycopg2.connect(
+            dbname=os.getenv('DB_NAME'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=os.getenv('DB_PORT', '5432')
+        )
+    return g.db
+
+# Close the database connection when the request ends
+@app.teardown_appcontext
+def close_db(error):
+    db = getattr(g, 'db', None)
+    if db is not None:
+        db.close()
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Load available datasets from the data directory
+# Load available datasets from the postgres
 @app.route('/load_datasets')
 def load_datasets():
-    datasets = [f for f in os.listdir('data') if f.endswith('.txt')]
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM datasets;")  # Fetch dataset names from the PostgreSQL database
+    datasets = [row[0] for row in cur.fetchall()]  # Extract names
+
+    cur.close()
     return jsonify(datasets)
 
 # Get initial data information (like vehicle capacity) from the selected dataset
