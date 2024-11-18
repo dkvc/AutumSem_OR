@@ -97,15 +97,15 @@ function displayResults(solution) {
     const routeTimes = [];
     const vehicleLoads = [];
 
-    if (solution.status === 1) {  // Assuming 1 indicates success
+    if (solution.status === 1) {
         outputDiv.innerHTML += `<p><strong>Objective Value:</strong> ${solution.objective}</p>`;
 
         solution.routes.forEach((route, index) => {
             let routeDetails = `<p><strong>Route for vehicle ${index + 1}:</strong></p>`;
-            routeDetails += `<p class="route-hover" data-index="${index}">${route.join(' -> ')}</p>`;  // Make it clickable
+            routeDetails += `<p class="route-hover" data-index="${index}">${route.join(' -> ')}</p>`;
 
             // Get metadata for the current route (time and load)
-            const metadata = solution.metadata[index];  // Get corresponding metadata for this route
+            const metadata = solution.metadata[index];
 
             // Display time and load from metadata
             routeDetails += `<p>Time of the route: ${metadata.time !== undefined ? metadata.time + ' minutes' : 'N/A'}</p>`;
@@ -119,7 +119,7 @@ function displayResults(solution) {
         });
 
         // Now that we have routeTimes and vehicleLoads, trigger graph generation
-        generateStatisticalGraphs(routeTimes, vehicleLoads);  // Pass them as arguments
+        generateStatisticalGraphs(routeTimes, vehicleLoads);
 
         outputDiv.innerHTML += `<p><strong>Total Time of All Routes:</strong> ${solution.total_time !== undefined ? solution.total_time + ' minutes' : 'N/A'}</p>`;
         outputDiv.innerHTML += `<p><strong>Total Travel Time of All Routes:</strong> ${solution.total_travel_time !== undefined ? solution.total_travel_time + ' minutes' : 'N/A'}</p>`;

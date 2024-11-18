@@ -59,7 +59,7 @@ def load_instance(dataset_name: str, time_precision_scaler: int) -> ProblemInsta
 
     # Parse the customer data (assuming the data starts after line 8)
     customer_data = []
-    for line in lines[8:]:  # Assuming data starts after the 8th line
+    for line in lines[8:]:
         if line.strip():
             customer_data.append(list(map(int, re.findall("[0-9]+", line))))
 
