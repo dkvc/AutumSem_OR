@@ -5,6 +5,7 @@
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="static/js/script.js"></script>
     <title>VRP Optimization</title>
 </head>
@@ -15,20 +16,38 @@
             <select id="dataset" onchange="loadDataInfo()"></select>
 
             <h3>Settings</h3>
-            <label>Time Precision Scaler:</label>
+            
+            <label>Optimization Method</label>
+            <select id="method">
+                <option value="or-tools">OR-Tools</option>
+                <option value="genetic">Genetic Algorithm</option>
+            </select>
+
+            <label id="time_precision_scaler_label">Time Precision Scaler:</label>
             <input type="number" id="time_precision_scaler" value="100">
             
-            <label>Time Limit (seconds):</label>
+            <label id="time_limit_label">Time Limit (seconds):</label>
             <input type="number" id="time_limit" value="360">
             
-            <button onclick="executeOptimization()">Execute</button>
+            <button onclick="executeOptimization()" id="exButton">Execute</button>
+            <button id="statsButton" class="btn btn-primary" style="display: none;">Show Statistical Analysis</button>
 
             <div id="output"></div>
         </div>
         <div class="graph" id="graph">
             <div id="loading-indicator" style="display: none;">Loading...</div>
             <svg id="graph-canvas"></svg>
-        </div>           
+        </div>
+        <!-- Modal for Statistical Analysis -->
+        <div id="statsModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span id="closeStats" class="close">&times;</span>
+                <h2>Statistical Analysis</h2>
+                <canvas id="statsCanvas" width="400" height="400"></canvas>
+                <hr>
+                <canvas id="pieChartCanvas" width="400" height="400"></canvas>
+            </div>
+        </div>
     </div>
 </body>
 </html>
