@@ -5,6 +5,7 @@ from util.instance_loader import load_instance
 import psycopg2
 import os
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -48,16 +49,47 @@ def load_datasets():
 # Get initial data information (like vehicle capacity) from the selected dataset
 @app.route('/get_data_info', methods=['POST'])
 def get_data_info():
-    dataset_name = request.json['dataset']
-    path = f'data/{dataset_name}'
-    time_precision_scaler = 100
-    data = load_instance(path, time_precision_scaler)
-    return jsonify({
-        'num_vehicles': data['num_vehicles'],
-        'vehicle_capacity': data['vehicle_capacities'][0]
-    })
+    # Extract dataset_name from the incoming JSON request
+    dataset_name = request.json.get('dataset')
 
-# Updated optimize function in the Flask application
+    # Check if dataset_name was provided
+    if not dataset_name:
+        return jsonify({'error': 'Dataset name is required'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT data FROM datasets WHERE name = %s;", (dataset_name,))
+    result = cur.fetchone()
+
+    # If dataset is not found, return an error response
+    if result is None:
+        cur.close()
+        conn.close()
+        return jsonify({'error': 'Dataset not found'}), 404
+
+    dataset_json = result[0]
+    cur.close()
+    conn.close()
+
+    # Extract content from JSON
+    content = dataset_json.get('content', '')
+
+    # Extract vehicle capacity (we assume it's the second number in the 'VEHICLE' section)
+    vehicle_capacity = None
+    vehicle_capacity_match = re.search(r'VEHICLE\nNUMBER\s+CAPACITY\s+(\d+)', content)
+    if vehicle_capacity_match:
+        vehicle_capacity = int(vehicle_capacity_match.group(1))
+
+    # Extract number of vehicles (we assume it's the count of rows in the 'VEHICLE' section)
+    num_vehicles = len(re.findall(r'\d+\s+\d+\s+\d+', content))  # Counts the rows under VEHICLE section
+
+    # Return the extracted information
+    return jsonify({
+        'num_vehicles': num_vehicles,
+        'vehicle_capacity': vehicle_capacity
+    })    
+
 @app.route('/optimize', methods=['POST'])
 def optimize():
     # Extract request parameters
@@ -67,8 +99,7 @@ def optimize():
     method = request.json.get('method', 'or-tools')  # Default to 'or-tools' if not specified
 
     # Load data instance
-    path = f'data/{dataset_name}'
-    data = load_instance(path, time_precision_scaler)
+    data = load_instance(dataset_name, time_precision_scaler)
     solver = Solver(data, time_precision_scaler)
 
     # Optimize based on the selected method
@@ -95,6 +126,7 @@ def optimize():
     }
 
     return jsonify(solution)
+
 
 
 if __name__ == '__main__':
